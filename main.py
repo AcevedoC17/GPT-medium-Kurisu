@@ -25,12 +25,12 @@ from discord.utils import get
 from discord import FFmpegPCMAudio
 from discord import TextChannel
 from youtube_dl import YoutubeDL
-import keep_alive
 from youtube_search import YoutubeSearch
 import asyncio
 
 # this is my Hugging Face profile link
 API_URL = 'https://api-inference.huggingface.co/models/BlightZz/'
+loop = False
 
 class MyClient(commands.Bot):
     def __init__(self, model_name, command_prefix):
@@ -44,7 +44,19 @@ class MyClient(commands.Bot):
         self.command()(self.hentai)
         self.command()(self.commandlist)
         self.command()(self.skip)
+        self.command()(self.leave)
+        self.command()(self.display)
+        self.command()(self.repeat)
+        self.command()(self.makePlaylist)
+        self.command()(self.addtoPlaylist)
+        self.command()(self.showPlaylists)
+        self.command()(self.playlist)
+        self.command()(self.devDisplay)
         self.queue = []
+        self.queuedict = {}
+        self.playlistdict = {}
+        with open("playlists.json", "r") as json_file:
+          self.playlistdict = json.load(json_file)
         self.api_endpoint = API_URL + model_name
         # retrieve the secret API token from the system environment
         huggingface_token = os.environ['HUGGINGFACE_TOKEN']
@@ -68,6 +80,24 @@ class MyClient(commands.Bot):
                                     data=data)
         ret = json.loads(response.content.decode('utf-8'))
         return ret
+    
+
+
+    async def devDisplay(self, ctx):
+      await ctx.send(self.playlistdict)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -85,6 +115,57 @@ class MyClient(commands.Bot):
         self.query({'inputs': {'text': 'Hello!'}})
     
 
+
+    async def makePlaylist(self, ctx, *, content):
+      self.playlistdict[content] = []
+    
+
+    async def playlist(self, ctx, *, content):
+      for s in self.playlistdict[content]:
+        try:
+          self.queuedict[ctx.guild.id].append(s)
+        except:
+          self.queuedict[ctx.guild.id] = [s]
+      await self.play(ctx, url = self.queuedict[ctx.guild.id].pop())
+
+
+
+
+    async def showPlaylists(self, ctx):
+      temp = "```These are the currently available playlists and their content.\n"
+      count = 1
+      for key, value in self.playlistdict.items():
+        temp = temp + key + ":" + "\n"
+        count = 1
+        for s in value:
+          temp = temp + str(count) + ". " + s + "\n"
+          count = count + 1
+      temp  = temp + "```"
+      await ctx.send(temp)
+
+
+
+
+
+
+    async def addtoPlaylist(self, ctx, *, content):
+      targetPlaylist = content[0:content.find(',')]
+      song = content[content.find(',')+2: len(content)]
+      self.playlistdict[targetPlaylist].append(song)
+      with open("playlists.json", "w") as outfile:
+        json.dump(self.playlistdict, outfile)
+      message = "Added " + "*" + song + "*" " to playlist " + "*" + targetPlaylist + "*"
+      await ctx.send(message)
+
+
+    async def repeat(self, ctx):
+      global loop
+      loop = not loop
+      if loop:
+        await ctx.send("I'll loop the song.")
+      else:
+        await ctx.send("I'll stop looping the song")
+    
 
 
 
@@ -104,6 +185,9 @@ class MyClient(commands.Bot):
           await message.add_reaction(emoji)
         if "sus" in message.content:
           emoji = discord.utils.get(message.guild.emojis, name = 'Amadeus')
+          await message.add_reaction(emoji)
+        if "ostia" in message.content:
+          emoji = discord.utils.get(message.guild.emojis, name = 'ostia')
           await message.add_reaction(emoji)
         if not self.user.mentioned_in(message):
           await self.process_commands(message)
@@ -130,6 +214,14 @@ class MyClient(commands.Bot):
 
 
 
+    async def display(self, ctx):
+      count = 1
+      temp = "```These are the songs currently in the queue:\n"
+      for s in self.queuedict[ctx.guild.id]:
+        temp = temp + str(count) + ". " + s + "\n"
+        count = count + 1
+      temp = temp + "```"
+      await ctx.send(temp)
 
     async def Hello(self, ctx):
       await ctx.send("Hello!")
@@ -182,7 +274,10 @@ class MyClient(commands.Bot):
             await message.add_reaction(emoji)
             await message.add_reaction(emoji2)
       else:
-         self.queue.append(url)
+         try:
+           self.queuedict[ctx.guild.id].append(url)
+         except:
+          self.queuedict[ctx.guild.id] = [url]
          await ctx.message.delete()
          await ctx.send("I added your song to the queue.")
 
@@ -191,24 +286,34 @@ class MyClient(commands.Bot):
 
 
     async def play_next(self, ctx, url):
+      if loop:
+          await self.play(ctx = ctx, url = url)
       print("play_next called")
-      if len(self.queue) >= 1:
+      if len(self.queuedict[ctx.guild.id]) >= 1:
         print("play_next if success.")
-        await self.play(ctx = ctx, url = self.queue.pop(0))
+        await self.play(ctx = ctx, url = self.queuedict[ctx.guild.id].pop(0))
       else:
         print("play_next else fulfilled")
         return
     
 
 
+    async def leave(self, ctx):
+      await ctx.message.guild.voice_client.disconnect()
+      await ctx.send("See you later.")
 
+
+
+
+
+    
     async def skip(self, ctx):
-      if len(self.queue) >= 1:
+      if len(self.queuedict[ctx.guild.id]) >= 1:
         print("skip if success.")
         voice = get(self.voice_clients, guild=ctx.guild)
         if voice.is_playing():
          voice.stop()
-         ctx.send("Skipping.")
+         await ctx.send("Skipping.")
         else:
           ctx.send("What do you want me to skip? There's nothing playing.")
       else:
@@ -252,6 +357,7 @@ class MyClient(commands.Bot):
 
     async def stop(self, ctx):
       voice = get(self.voice_clients, guild=ctx.guild)
+      self.queue.clear()
       if voice.is_playing():
         voice.stop()
         await ctx.send('Stopped.')
@@ -275,7 +381,6 @@ class MyClient(commands.Bot):
 
 def main():
     #DialoGPT-medium-Kurisu is my model name
-    keep_alive.keep_alive()
     client = MyClient('DialoGPT-medium-Kurisu', '$')
     client.run(os.environ['DISCORD_TOKEN'])
 
