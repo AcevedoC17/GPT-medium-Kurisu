@@ -54,6 +54,8 @@ class MyClient(commands.Bot):
         self.command()(self.devDisplay)
         self.queue = []
         self.queuedict = {}
+        with open("servers.json", "r") as json_file:
+          self.queuedict = json.load(json_file)
         self.playlistdict = {}
         with open("playlists.json", "r") as json_file:
           self.playlistdict = json.load(json_file)
@@ -113,6 +115,15 @@ class MyClient(commands.Bot):
         # send a request to the model without caring about the response
         # just so that the model wakes up and starts loading
         self.query({'inputs': {'text': 'Hello!'}})
+        
+        for guild in self.guilds:
+          self.queuedict[guild.id] = []
+          print(guild.id)
+          print("added to dict")
+        with open("servers.json", "w") as outfile:
+          json.dump(self.queuedict, outfile)
+          print("Saved server list as json.")
+        
     
 
 
